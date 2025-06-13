@@ -1,9 +1,18 @@
 ---
 title: 开发手册
-description: 如何快速开始 WR.DO
+description: 简单介绍 WR.DO 部署所需的环境变量
 ---
 
 <DocsLang en="/docs/developer/installation" zh="/docs/developer/installation-zh" />
+
+<Callout type="info" twClass="mt-4">
+  建议详细阅读以下官方部署文档：
+    - [快速开始](/docs/developer/quick-start-zh) 获取各项配置
+    - [部署指南](/docs/developer/deploy-zh) 了解部署方法
+
+  或参考社区优秀部署文档：
+    - https://linux.do/t/topic/711806 
+</Callout>
 
 <Steps>
 
@@ -50,7 +59,6 @@ pnpm install
 | RESEND\_API\_KEY           | `123465`                                          | Resend 的 API 密钥。                                                         |
 | RESEND\_FROM\_EMAIL        | `"you <support@your-domain.com>"`                 | 用于发送邮件的邮箱地址。                                                             |
 | NEXT\_PUBLIC\_OPEN\_SIGNUP | `1`                                               | 开放注册。                                                                    |
-| NEXT_PUBLIC_ENABLE_SUBDOMAIN_APPLY | `0`                                         | 启用子域名申请模式                                                                    |
 | SCREENSHOTONE\_BASE\_URL   | `https://api.example.com`                         | 待补充                                                                      |
 | GITHUB\_TOKEN              | `ghp_sscsfarwetqet`                               | [https://github.com/settings/tokens](https://github.com/settings/tokens) |
 | SKIP_DB_CHECK | `false` | 跳过数据库连接检测 |
