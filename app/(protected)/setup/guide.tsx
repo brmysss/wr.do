@@ -7,14 +7,12 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
-import { siteConfig } from "@/config/site";
 import { cn, removeUrlSuffix } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
-import { Skeleton } from "@/components/ui/skeleton";
 import { FormSectionColumns } from "@/components/dashboard/form-section-columns";
 import { Icons } from "@/components/shared/icons";
 
@@ -202,7 +200,7 @@ function SetAdminRole({ id, email }: { id: string; email: string }) {
         <span className="text-sm font-semibold text-muted-foreground">
           {t("Allow Sign Up")}:
         </span>
-        {siteConfig.openSignup ? ReadyBadge : <Skeleton className="h-4 w-12" />}
+        {ReadyBadge}
       </div>
 
       <div className="flex items-center justify-between">
@@ -227,6 +225,9 @@ function SetAdminRole({ id, email }: { id: string; email: string }) {
       </div>
 
       <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+        <p className="flex items-start gap-1">
+          • {t("After v1-0-2, this setup guide is not needed anymore")}.
+        </p>
         <p className="flex items-start gap-1">
           •{" "}
           {t(

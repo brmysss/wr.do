@@ -1,7 +1,10 @@
+import { env } from "@/env.mjs";
+import { siteConfig } from "@/config/site";
 import { createDNSRecord } from "@/lib/cloudflare";
 import { updateUserRecordReview } from "@/lib/dto/cloudflare-dns-record";
 import { getDomainsByFeature } from "@/lib/dto/domains";
-import { checkUserStatus } from "@/lib/dto/user";
+import { checkUserStatus, getUserById } from "@/lib/dto/user";
+import { applyRecordToUserEmailHtml, resend } from "@/lib/email";
 import { getCurrentUser } from "@/lib/session";
 
 export async function POST(req: Request) {
@@ -20,7 +23,6 @@ export async function POST(req: Request) {
     const { record: reviewRecord, userId, id } = await req.json();
     const record = {
       ...reviewRecord,
-      // comment: "Created by wr.do (review mode)",
       id,
     };
 
@@ -40,9 +42,11 @@ export async function POST(req: Request) {
       record,
     );
 
+    // console.log("[data]", data);
+
     if (!data.success || !data.result?.id) {
-      return Response.json(data.messages, {
-        status: 501,
+      return Response.json(data.errors[0].message, {
+        status: 503,
       });
     } else {
       const res = await updateUserRecordReview(userId, id, {
@@ -61,6 +65,20 @@ export async function POST(req: Request) {
         modified_on: data.result.modified_on,
         active: 0,
       });
+
+      const userInfo = await getUserById(userId);
+      if (userInfo) {
+        await resend.emails.send({
+          from: env.RESEND_FROM_EMAIL,
+          to: userInfo.email || "",
+          subject: "Your subdomain has been applied",
+          html: applyRecordToUserEmailHtml({
+            appUrl: siteConfig.url,
+            appName: siteConfig.name,
+            subdomain: data.result.name,
+          }),
+        });
+      }
 
       if (res.status !== "success") {
         return Response.json(res.status, {

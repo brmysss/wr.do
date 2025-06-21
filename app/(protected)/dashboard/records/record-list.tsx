@@ -154,15 +154,15 @@ export default function UserRecordsList({ user, action }: RecordListProps) {
             <div className="grid gap-2">
               <CardTitle>{t("Subdomain List")}</CardTitle>
               <CardDescription className="hidden text-balance sm:block">
-                {t("Please read the")}{" "}
+                {t("Before using please read the")}{" "}
                 <Link
                   target="_blank"
                   className="font-semibold text-yellow-600 after:content-['↗'] hover:underline"
                   href="/docs/dns-records#legitimacy-review"
                 >
                   {t("legitimacy review")}
-                </Link>{" "}
-                {t("before using")}. {t("See")}{" "}
+                </Link>
+                . {t("See")}{" "}
                 <Link
                   target="_blank"
                   className="text-blue-500 hover:underline"
@@ -252,11 +252,15 @@ export default function UserRecordsList({ user, action }: RecordListProps) {
                       </Badge>
                     </TableCell>
                     <TableCell className="col-span-1">
-                      <LinkInfoPreviewer
-                        apiKey={user.apiKey ?? ""}
-                        url={"https://" + record.name}
-                        formatUrl={record.name}
-                      />
+                      {[0, 1].includes(record.active) ? (
+                        <LinkInfoPreviewer
+                          apiKey={user.apiKey ?? ""}
+                          url={"https://" + record.name}
+                          formatUrl={record.name}
+                        />
+                      ) : (
+                        record.name
+                      )}
                     </TableCell>
                     <TableCell className="col-span-2 hidden truncate text-nowrap sm:inline-block">
                       <TooltipProvider>
@@ -275,12 +279,13 @@ export default function UserRecordsList({ user, action }: RecordListProps) {
                       }
                     </TableCell>
                     <TableCell className="col-span-1 hidden items-center justify-center gap-1 sm:flex">
-                      {record.active !== 2 ? (
+                      {[0, 1].includes(record.active) && (
                         <SwitchWrapper
                           record={record}
                           onChangeStatu={handleChangeStatu}
                         />
-                      ) : (
+                      )}
+                      {record.active === 2 && (
                         <Badge
                           className="text-nowrap rounded-md"
                           variant={"yellow"}
@@ -288,7 +293,16 @@ export default function UserRecordsList({ user, action }: RecordListProps) {
                           {t("Pending")}
                         </Badge>
                       )}
-                      {record.active !== 1 && (
+                      {record.active === 3 && (
+                        <Badge
+                          className="text-nowrap rounded-md"
+                          variant={"outline"}
+                        >
+                          {t("Rejected")}
+                        </Badge>
+                      )}
+
+                      {![1, 3].includes(record.active) && (
                         <TooltipProvider>
                           <Tooltip delayDuration={200}>
                             <TooltipTrigger className="truncate">
@@ -339,7 +353,8 @@ export default function UserRecordsList({ user, action }: RecordListProps) {
                             {record.user.name ?? record.user.email}
                           </TooltipTrigger>
                           <TooltipContent>
-                            {record.user.name ?? record.user.email}
+                            <p>{record.user.name}</p>
+                            <p>{record.user.email}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -350,9 +365,9 @@ export default function UserRecordsList({ user, action }: RecordListProps) {
                       />
                     </TableCell>
                     <TableCell className="col-span-1 flex justify-center">
-                      {record.active !== 2 ? (
+                      {record.active === 3 ? (
                         <Button
-                          className="text-nowrap text-sm hover:bg-slate-100 dark:hover:text-primary-foreground"
+                          className="h-7 text-nowrap px-1 text-xs sm:px-1.5"
                           size="sm"
                           variant={"outline"}
                           onClick={() => {
@@ -362,14 +377,33 @@ export default function UserRecordsList({ user, action }: RecordListProps) {
                             setShowForm(!isShowForm);
                           }}
                         >
-                          <p>{t("Edit")}</p>
-                          <PenLine className="ml-1 size-4" />
+                          <p className="hidden text-nowrap sm:block">
+                            {t("Reject")}
+                          </p>
+                          <Icons.close className="mx-0.5 size-4 sm:ml-1 sm:size-3" />
+                        </Button>
+                      ) : [0, 1].includes(record.active) ? (
+                        <Button
+                          className="h-7 text-nowrap px-1 text-xs hover:bg-slate-100 dark:hover:text-primary-foreground sm:px-1.5"
+                          size="sm"
+                          variant={"outline"}
+                          onClick={() => {
+                            setCurrentEditRecord(record);
+                            setShowForm(false);
+                            setFormType("edit");
+                            setShowForm(!isShowForm);
+                          }}
+                        >
+                          <p className="hidden text-nowrap sm:block">
+                            {t("Edit")}
+                          </p>
+                          <PenLine className="mx-0.5 size-4 sm:ml-1 sm:size-3" />
                         </Button>
                       ) : record.active === 2 &&
                         user.role === "ADMIN" &&
                         isAdmin ? (
                         <Button
-                          className="text-sm hover:bg-blue-400 dark:hover:text-primary-foreground"
+                          className="h-7 text-nowrap px-1 text-xs hover:bg-blue-400 dark:hover:text-primary-foreground sm:px-1.5"
                           size="sm"
                           variant={"blue"}
                           onClick={() => {
@@ -379,7 +413,10 @@ export default function UserRecordsList({ user, action }: RecordListProps) {
                             setShowForm(!isShowForm);
                           }}
                         >
-                          <p>{t("Review")}</p>
+                          <p className="hidden text-nowrap sm:block">
+                            {t("Review")}
+                          </p>
+                          <Icons.eye className="mx-0.5 size-4 sm:ml-1 sm:size-3" />
                         </Button>
                       ) : (
                         "--"
@@ -415,7 +452,7 @@ export default function UserRecordsList({ user, action }: RecordListProps) {
       </Card>
 
       <Modal
-        className="max-h-[99vh] overflow-y-auto md:max-w-2xl"
+        className="md:max-w-2xl"
         showModal={isShowForm}
         setShowModal={setShowForm}
       >

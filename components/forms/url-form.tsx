@@ -1,6 +1,13 @@
 "use client";
 
-import { Dispatch, SetStateAction, useMemo, useTransition } from "react";
+import {
+  Dispatch,
+  SetStateAction,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { User } from "@prisma/client";
 import { Sparkles } from "lucide-react";
@@ -52,13 +59,14 @@ export function UrlForm({
 }: RecordFormProps) {
   const [isPending, startTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
+  const [currentPrefix, setCurrentPrefix] = useState(initData?.prefix || "");
+  const [limitLen, setLimitLen] = useState(3);
   const t = useTranslations("List");
 
   const {
     handleSubmit,
     register,
     formState: { errors },
-    getValues,
     setValue,
   } = useForm<FormData>({
     resolver: zodResolver(createUrlSchema),
@@ -67,21 +75,19 @@ export function UrlForm({
       target: initData?.target || "",
       url: initData?.url || "",
       active: initData?.active || 1,
-      prefix: initData?.prefix || "wr.do",
+      prefix: initData?.prefix || "",
       visible: initData?.visible || 0,
       expiration: initData?.expiration || "-1",
       password: initData?.password || "",
     },
   });
 
-  const { data: shortDomains, isLoading } = useSWR<{ domain_name: string }[]>(
-    "/api/domain?feature=short",
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 10000,
-    },
-  );
+  const { data: shortDomains, isLoading } = useSWR<
+    { domain_name: string; min_url_length: number }[]
+  >("/api/domain?feature=short", fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 10000,
+  });
 
   const validDefaultDomain = useMemo(() => {
     if (!shortDomains?.length) return undefined;
@@ -95,6 +101,20 @@ export function UrlForm({
 
     return shortDomains[0].domain_name;
   }, [shortDomains, initData?.prefix]);
+
+  useEffect(() => {
+    if (validDefaultDomain) {
+      setValue("prefix", validDefaultDomain);
+      setCurrentPrefix(validDefaultDomain);
+    }
+  }, [validDefaultDomain]);
+
+  useEffect(() => {
+    setLimitLen(
+      shortDomains?.find((d) => d.domain_name === currentPrefix)
+        ?.min_url_length || 3,
+    );
+  }, [currentPrefix]);
 
   const onSubmit = handleSubmit((data) => {
     if (type === "add") {
@@ -222,6 +242,7 @@ export function UrlForm({
                   <Select
                     onValueChange={(value: string) => {
                       setValue("prefix", value);
+                      setCurrentPrefix(value);
                     }}
                     name="prefix"
                     defaultValue={validDefaultDomain}
@@ -249,6 +270,7 @@ export function UrlForm({
                   id="url"
                   className="w-full rounded-none pl-[8px] shadow-inner"
                   size={20}
+                  minLength={limitLen}
                   {...register("url")}
                   disabled={type === "edit"}
                 />

@@ -3,6 +3,7 @@
 import {
   Dispatch,
   SetStateAction,
+  useEffect,
   useMemo,
   useState,
   useTransition,
@@ -14,10 +15,9 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import useSWR from "swr";
 
-import { siteConfig } from "@/config/site";
 import { CreateDNSRecord, RecordType } from "@/lib/cloudflare";
 import { UserRecordFormData } from "@/lib/dto/cloudflare-dns-record";
-import { RECORD_TYPE_ENUMS, TTL_ENUMS } from "@/lib/enums";
+import { TTL_ENUMS } from "@/lib/enums";
 import { fetcher } from "@/lib/utils";
 import { createRecordSchema } from "@/lib/validations/record";
 import { Button } from "@/components/ui/button";
@@ -65,10 +65,10 @@ export function RecordForm({
   const [currentRecordType, setCurrentRecordType] = useState(
     initData?.type || "CNAME",
   );
-  const [currentZoneName, setCurrentZoneName] = useState(
-    initData?.zone_name || "wr.do",
-  );
+  const [currentZoneName, setCurrentZoneName] = useState(initData?.zone_name);
+  const [limitLen, setLimitLen] = useState(3);
   const [email, setEmail] = useState(initData?.user.email || user.email);
+  const [allowedRecordTypes, setAllowedRecordTypes] = useState<string[]>([]);
   const isAdmin = action.indexOf("admin") > -1;
 
   const t = useTranslations("List");
@@ -77,11 +77,12 @@ export function RecordForm({
     handleSubmit,
     register,
     formState: { errors },
+    getValues,
     setValue,
   } = useForm<FormData>({
     resolver: zodResolver(createRecordSchema),
     defaultValues: {
-      zone_name: initData?.zone_name || "wr.do",
+      zone_name: initData?.zone_name,
       type: initData?.type || "CNAME",
       ttl: initData?.ttl || 1,
       proxied: initData?.proxied || false,
@@ -92,13 +93,20 @@ export function RecordForm({
   });
 
   // Fetch the record domains
-  const { data: recordDomains, isLoading } = useSWR<{ domain_name: string }[]>(
-    "/api/domain?feature=record",
-    fetcher,
+  const { data: recordDomains, isLoading } = useSWR<
     {
-      revalidateOnFocus: false,
-      dedupingInterval: 10000,
-    },
+      domain_name: string;
+      cf_record_types: string;
+      min_record_length: number;
+    }[]
+  >("/api/domain?feature=record", fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 10000,
+  });
+
+  const { data: configs } = useSWR<Record<string, any>>(
+    "/api/configs?key=enable_subdomain_apply",
+    fetcher,
   );
 
   const validDefaultDomain = useMemo(() => {
@@ -114,6 +122,27 @@ export function RecordForm({
     return recordDomains[0].domain_name;
   }, [recordDomains, initData?.zone_name]);
 
+  useEffect(() => {
+    if (validDefaultDomain) {
+      setValue("zone_name", validDefaultDomain);
+      setCurrentZoneName(validDefaultDomain);
+    }
+  }, [validDefaultDomain]);
+
+  useEffect(() => {
+    if (recordDomains && recordDomains.length > 0) {
+      setAllowedRecordTypes(
+        recordDomains
+          .find((d) => d.domain_name === validDefaultDomain)!
+          .cf_record_types.split(","),
+      );
+      setLimitLen(
+        recordDomains.find((d) => d.domain_name === currentZoneName)
+          ?.min_record_length || 3,
+      );
+    }
+  }, [currentZoneName, recordDomains, validDefaultDomain]);
+
   const onSubmit = handleSubmit((data) => {
     if (isAdmin && type === "edit" && initData?.active === 2) {
       handleApplyRecord(data);
@@ -125,7 +154,7 @@ export function RecordForm({
   });
 
   const handleCreateRecord = async (data: CreateDNSRecord) => {
-    if (siteConfig.enableSubdomainApply && data.comment!.length < 20) {
+    if (configs?.enable_subdomain_apply && data.comment!.length < 20) {
       toast.warning("Apply reason must be at least 20 characters!");
     } else {
       startTransition(async () => {
@@ -165,7 +194,31 @@ export function RecordForm({
             description: await response.text(),
           });
         } else {
-          const res = await response.json();
+          toast.success(`Update successfully!`);
+          setShowForm(false);
+          onRefresh();
+        }
+      }
+    });
+  };
+
+  const handleRejectRecord = async (data: CreateDNSRecord) => {
+    startTransition(async () => {
+      if (type === "edit") {
+        const response = await fetch(`${action}/reject`, {
+          method: "POST",
+          body: JSON.stringify({
+            id: initData?.id,
+            userId: initData?.userId,
+            record: data,
+            recordId: initData?.record_id,
+          }),
+        });
+        if (!response.ok || response.status !== 200) {
+          toast.error("Update Failed", {
+            description: await response.text(),
+          });
+        } else {
           toast.success(`Update successfully!`);
           setShowForm(false);
           onRefresh();
@@ -206,6 +259,7 @@ export function RecordForm({
         method: "POST",
         body: JSON.stringify({
           record: data,
+          recordId: initData?.record_id,
           userId: initData?.userId,
           id: initData?.id,
         }),
@@ -228,7 +282,7 @@ export function RecordForm({
       <div className="rounded-t-lg bg-muted px-4 py-2 text-lg font-semibold">
         {type === "add" ? t("Create record") : t("Edit record")}
       </div>
-      {siteConfig.enableSubdomainApply && (
+      {configs?.enable_subdomain_apply && (
         <ul className="m-2 list-disc gap-1 rounded-md bg-yellow-600/10 p-2 px-5 pr-2 text-xs font-medium text-yellow-600 dark:bg-yellow-500/10 dark:text-yellow-500">
           <li>{t("The administrator has enabled application mode")}.</li>
           <li>
@@ -271,7 +325,7 @@ export function RecordForm({
           </div>
         )}
 
-        {siteConfig.enableSubdomainApply && (
+        {configs?.enable_subdomain_apply && (
           <FormSectionColumns
             title={t("What are you planning to use the subdomain for?")}
             required
@@ -329,25 +383,29 @@ export function RecordForm({
             </p>
           </FormSectionColumns>
           <FormSectionColumns title={t("Type")} required>
-            <Select
-              onValueChange={(value: RecordType) => {
-                setValue("type", value);
-                setCurrentRecordType(value);
-              }}
-              name={"type"}
-              defaultValue={initData?.type || "CNAME"}
-            >
-              <SelectTrigger className="w-full shadow-inner">
-                <SelectValue placeholder="Select a type" />
-              </SelectTrigger>
-              <SelectContent>
-                {RECORD_TYPE_ENUMS.map((type) => (
-                  <SelectItem key={type.value} value={type.value}>
-                    {type.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isLoading ? (
+              <Skeleton className="h-9 w-full" />
+            ) : (
+              <Select
+                onValueChange={(value: RecordType) => {
+                  setValue("type", value);
+                  setCurrentRecordType(value);
+                }}
+                name={"type"}
+                defaultValue={initData?.type || "CNAME"}
+              >
+                <SelectTrigger className="w-full shadow-inner">
+                  <SelectValue placeholder="Select a type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allowedRecordTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <p className="p-1 text-[13px] text-muted-foreground">
               {t("Required")}.
             </p>
@@ -364,10 +422,10 @@ export function RecordForm({
                   id="name"
                   className="flex-1 shadow-inner"
                   size={32}
+                  minLength={limitLen}
                   {...register("name")}
                 />
-                {(currentRecordType === "CNAME" ||
-                  currentRecordType === "A") && (
+                {["CNAME", "A", "AAAA"].includes(currentRecordType) && (
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-slate-500">
                     .{currentZoneName}
                   </span>
@@ -389,9 +447,9 @@ export function RecordForm({
           <FormSectionColumns
             required
             title={
-              currentRecordType === "CNAME"
+              ["CNAME"].includes(currentRecordType)
                 ? t("Content")
-                : currentRecordType === "A"
+                : ["A", "AAAA"].includes(currentRecordType)
                   ? t("IPv4 address")
                   : t("Content")
             }
@@ -414,9 +472,9 @@ export function RecordForm({
                 </p>
               ) : (
                 <p className="pb-0.5 text-[13px] text-muted-foreground">
-                  {currentRecordType === "CNAME"
+                  {["CNAME"].includes(currentRecordType)
                     ? `${t("Required")}. ${t("Example")} www.example.com`
-                    : currentRecordType === "A"
+                    : ["A", "AAAA"].includes(currentRecordType)
                       ? `${t("Required")}. ${t("Example")} 8.8.8.8`
                       : t("Required")}
                 </p>
@@ -448,7 +506,7 @@ export function RecordForm({
               {t("Optional")}. {t("Time To Live")}.
             </p>
           </FormSectionColumns>
-          {["A", "CNAME"].includes(currentRecordType) && (
+          {["CNAME", "A", "AAAA"].includes(currentRecordType) && (
             <FormSectionColumns title={t("Proxy")}>
               <div className="flex w-full items-center gap-2">
                 <Label className="sr-only" htmlFor="proxy">
@@ -483,6 +541,7 @@ export function RecordForm({
               )}
             </Button>
           )}
+
           <Button
             type="reset"
             variant="outline"
@@ -491,18 +550,40 @@ export function RecordForm({
           >
             {t("Cancel")}
           </Button>
-          <Button
-            type="submit"
-            variant="blue"
-            disabled={isPending}
-            className="w-[80px] shrink-0 px-0"
-          >
-            {isPending ? (
-              <Icons.spinner className="size-4 animate-spin" />
-            ) : (
-              <p>{type === "edit" ? t("Update") : t("Save")}</p>
-            )}
-          </Button>
+          {type === "edit" && initData?.active === 2 && isAdmin && (
+            <Button
+              type="button"
+              className="w-[80px] px-0"
+              onClick={() => handleRejectRecord(getValues())}
+              disabled={isPending}
+            >
+              {isPending ? (
+                <Icons.spinner className="size-4 animate-spin" />
+              ) : (
+                <p>{t("Reject")}</p>
+              )}
+            </Button>
+          )}
+          {initData?.active !== 3 && (
+            <Button
+              type="submit"
+              variant="blue"
+              disabled={isPending}
+              className="w-[80px] shrink-0 px-0"
+            >
+              {isPending ? (
+                <Icons.spinner className="size-4 animate-spin" />
+              ) : (
+                <p>
+                  {type === "edit"
+                    ? initData?.active === 2 && isAdmin
+                      ? t("Agree")
+                      : t("Update")
+                    : t("Save")}
+                </p>
+              )}
+            </Button>
+          )}
         </div>
       </form>
     </div>

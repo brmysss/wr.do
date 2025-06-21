@@ -1,23 +1,27 @@
-import { env } from "@/env.mjs";
+import { getMultipleConfigs } from "@/lib/dto/system-config";
 
-export async function GET(req: Request) {
+export const dynamic = "force-dynamic";
+
+export async function GET() {
   try {
-    if (process.env.VERCEL) {
-      return Response.json({
-        google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
-        github: !!(env.GITHUB_ID && env.GITHUB_SECRET),
-        linuxdo: !!(env.LinuxDo_CLIENT_ID && env.LinuxDo_CLIENT_SECRET),
-        resend: !!(env.RESEND_API_KEY && env.RESEND_FROM_EMAIL),
-      });
-    } else {
-      // TODO: (docker) cannot get env on docker environment
-      return Response.json({
-        google: true,
-        github: true,
-        linuxdo: true,
-        resend: true,
-      });
-    }
+    const configs = await getMultipleConfigs([
+      "enable_user_registration",
+      "enable_subdomain_apply",
+      "system_notification",
+      "enable_github_oauth",
+      "enable_google_oauth",
+      "enable_liunxdo_oauth",
+      "enable_resend_email_login",
+      "enable_email_password_login",
+    ]);
+    return Response.json({
+      google: configs.enable_google_oauth,
+      github: configs.enable_github_oauth,
+      linuxdo: configs.enable_liunxdo_oauth,
+      resend: configs.enable_resend_email_login,
+      credentials: configs.enable_email_password_login,
+      registration: configs.enable_user_registration,
+    });
   } catch (error) {
     console.log("[Error]", error);
   }
